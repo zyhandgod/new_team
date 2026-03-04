@@ -387,11 +387,13 @@ class RedeemFlowService:
                         
                         # 触发回退并进入重试逻辑
                         await self._rollback_redemption(db_session, code, team_id_final, email=email)
-                        last_error = "邀请发送后校验失败（账号可能异常）"
+                        last_error = f"Team {team_id_final} 校验失败（邀请发送成功但同步未见成员）"
+                        
                         if attempt < max_retries - 1:
-                            current_target_team_id = None
+                            logger.info(f"检测到虚假成功，原 Team ({team_id_final}) 第 {attempt + 1} 次重试...")
+                            current_target_team_id = team_id_final # 保持同一个 Team 重试
                             continue
-                        return {"success": False, "error": last_error}
+                        return {"success": False, "error": f"连续 {max_retries} 次虚假成功，该 Team 账号 ({team_id_final}) 可能存在同步延迟或异常，请稍后再试"}
                     
                     logger.info(f"兑换成功: {email} 加入 Team {team_id_final}")
 
