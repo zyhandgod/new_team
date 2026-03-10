@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON 解析测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        
+        .form-callout {
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            border: 1px solid;
+        }
+        
+        .form-callout-success {
+            background: rgba(34, 197, 94, 0.1);
+            border-color: rgba(34, 197, 94, 0.3);
+        }
+        
+        .form-callout-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #444;
+            border-radius: 6px;
+            background: #2a2a2a;
+            color: #e0e0e0;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-success {
+            background: #22c55e;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+        
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #6b7280;
+            color: #e0e0e0;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem;
+            border-radius: 6px;
+            color: white;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .toast.show {
+            opacity: 1;
+        }
+        
+        .toast.success {
+            background: #22c55e;
+        }
+        
+        .toast.error {
+            background: #ef4444;
+        }
+        
+        .toast.info {
+            background: #3b82f6;
+        }
+    </style>
+</head>
+<body>
+    <h1>ChatGPT Token JSON 解析器</h1>
+    
+    <div class="form-callout form-callout-success">
+        <div class="form-callout-title">🚀 快速解析 JSON</div>
+        <p>从 <code>https://chatgpt.com/api/auth/session</code> 复制 JSON 数据，一键自动填充所有字段</p>
+        
+        <div class="form-group">
+            <textarea id="jsonParseInput" class="form-control" rows="6" 
+                placeholder='粘贴从 https://chatgpt.com/api/auth/session 获取的 JSON 数据，例如：
+{
+  "user": {"email": "your@email.com"},
+  "accessToken": "eyJ...",
+  "sessionToken": "eyJ..."
+}'></textarea>
+        </div>
+        
+        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem;">
+            <button type="button" class="btn btn-success" onclick="parseAndFillJSON()">
+                ⚡ 解析并填充
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="openOfficialAPI()">
+                🔗 打开 API 页面
+            </button>
+            <button type="button" class="btn btn-outline" onclick="clearAllFields()">
+                🗑️ 清空所有字段
+            </button>
+        </div>
+        
+        <div id="parseResult" style="font-size: 0.875rem;"></div>
+    </div>
+    
+    <form id="singleImportForm">
+        <div class="form-group">
+            <label>邮箱</label>
+            <input type="email" name="email" class="form-control" placeholder="admin@example.com">
+        </div>
+        
+        <div class="form-group">
+            <label>Access Token (AT)</label>
+            <input type="text" name="accessToken" class="form-control" placeholder="eyJhbGciOiJSUzI1Ni...">
+        </div>
+        
+        <div class="form-group">
+            <label>Session Token (ST)</label>
+            <input type="text" name="sessionToken" class="form-control" placeholder="eyJ...">
+        </div>
+        
+        <div class="form-group">
+            <label>Refresh Token (RT)</label>
+            <input type="text" name="refreshToken" class="form-control" placeholder="rt-...">
+        </div>
+        
+        <div class="form-group">
+            <label>Client ID</label>
+            <input type="text" name="clientId" class="form-control" placeholder="app_...">
+        </div>
+        
+        <div class="form-group">
+            <label>Account ID</label>
+            <input type="text" name="accountId" class="form-control" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+        </div>
+    </form>
+    
+    <div id="toast" class="toast"></div>
+    
+    <script>
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type} show`;
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+        
+        function parseAndFillJSON() {
+            const jsonInput = document.getElementById('jsonParseInput');
+            const resultDiv = document.getElementById('parseResult');
+            
+            const jsonText = jsonInput.value.trim();
+            if (!jsonText) {
+                showToast('请先粘贴 JSON 数据', 'error');
+                return;
+            }
+            
+            try {
+                const data = JSON.parse(jsonText);
+                
+                // 提取各种字段
+                const email = data.user?.email || '';
+                const accessToken = data.accessToken || '';
+                const sessionToken = data.sessionToken || '';
+                
+                // 填充表单字段
+                const form = document.getElementById('singleImportForm');
+                if (form) {
+                    if (email) form.email.value = email;
+                    if (accessToken) form.accessToken.value = accessToken;
+                    if (sessionToken) form.sessionToken.value = sessionToken;
+                }
+                
+                // 显示解析结果
+                let resultHtml = '<div style="color: #22c55e;">✅ 解析成功！已自动填充以下字段：</div><ul style="margin: 0.5rem 0; padding-left: 1.5rem; font-size: 0.8rem;">';
+                
+                if (email) resultHtml += `<li>邮箱: ${email}</li>`;
+                if (accessToken) resultHtml += `<li>Access Token: ${accessToken.substring(0, 20)}...</li>`;
+                if (sessionToken) resultHtml += `<li>Session Token: ${sessionToken.substring(0, 20)}...</li>`;
+                
+                if (!email && !accessToken && !sessionToken) {
+                    resultHtml = '<div style="color: #f59e0b;">⚠️ 未找到有效的字段，请检查 JSON 格式</div>';
+                }
+                
+                resultHtml += '</ul>';
+                
+                // 生成导入格式
+                if (email && (accessToken || sessionToken)) {
+                    const importToken = sessionToken || accessToken;
+                    const importFormat = `${email}----${importToken}`;
+                    resultHtml += `<div style="margin-top: 1rem; padding: 0.75rem; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 6px;">
+                        <div style="font-weight: 600; margin-bottom: 0.5rem;">📋 导入格式：</div>
+                        <div style="font-family: monospace; font-size: 0.8rem; word-break: break-all; background: rgba(0,0,0,0.3); padding: 0.5rem; border-radius: 4px;">${importFormat}</div>
+                        <button type="button" onclick="copyToClipboard('${importFormat}')" style="margin-top: 0.5rem; padding: 0.25rem 0.5rem; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">复制格式</button>
+                    </div>`;
+                }
+                
+                resultDiv.innerHTML = resultHtml;
+                
+                // 清空输入框
+                jsonInput.value = '';
+                
+                showToast('JSON 解析完成，字段已自动填充', 'success');
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div style="color: #ef4444;">❌ JSON 解析失败: ${error.message}</div>`;
+                showToast('JSON 格式错误，请检查数据', 'error');
+            }
+        }
+        
+        function openOfficialAPI() {
+            window.open('https://chatgpt.com/api/auth/session', '_blank', 'noopener');
+            showToast('已打开 ChatGPT API 页面，请复制返回的 JSON 数据', 'info');
+        }
+        
+        function clearAllFields() {
+            const form = document.getElementById('singleImportForm');
+            const jsonInput = document.getElementById('jsonParseInput');
+            const resultDiv = document.getElementById('parseResult');
+            
+            if (form) form.reset();
+            if (jsonInput) jsonInput.value = '';
+            if (resultDiv) resultDiv.innerHTML = '';
+            
+            showToast('所有字段已清空', 'info');
+        }
+        
+        async function copyToClipboard(text) {
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(text);
+                    showToast('已复制到剪贴板', 'success');
+                    return;
+                }
+            } catch (err) {
+                console.error('Modern copy failed:', err);
+            }
+            
+            // Fallback
+            try {
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-9999px";
+                textArea.style.top = "0";
+                textArea.style.opacity = "0";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                if (successful) {
+                    showToast('已复制到剪贴板', 'success');
+                } else {
+                    showToast('复制失败', 'error');
+                }
+            } catch (err) {
+                showToast('复制失败', 'error');
+            }
+        }
+    </script>
+</body>
+</html>
